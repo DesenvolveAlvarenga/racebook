@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+/* Fontes carregadas via next/font no layout raiz */
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-barlow), var(--font-inter), ui-sans-serif, sans-serif;
+}
+
+/* Identidade Racebook: azul-marinho, preto, branco, cinza claro e laranja de destaque */
+@theme {
+  --color-navy-50: #eef2f8;
+  --color-navy-100: #d9e1ee;
+  --color-navy-200: #b3c2da;
+  --color-navy-300: #8197ba;
+  --color-navy-400: #536b95;
+  --color-navy-500: #354c74;
+  --color-navy-600: #253a5e;
+  --color-navy-700: #1a2c4b;
+  --color-navy-800: #12203a;
+  --color-navy-900: #0b1528;
+  --color-navy-950: #060c18;
+
+  --color-accent-50: #fff3ed;
+  --color-accent-100: #ffe2d3;
+  --color-accent-200: #ffc0a3;
+  --color-accent-300: #ff9466;
+  --color-accent-400: #ff6f38;
+  --color-accent-500: #ff5414;
+  --color-accent-600: #eb3f05;
+  --color-accent-700: #c22f07;
+
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-white text-navy-950 antialiased;
+  }
+
+  ::selection {
+    @apply bg-accent-500 text-white;
+  }
+
+  /* Evita zoom automático do iOS em campos com fonte < 16px */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Faixas diagonais usadas como grafismo esportivo */
+.bg-speed-stripes {
+  background-image: repeating-linear-gradient(
+    -60deg,
+    transparent 0 22px,
+    rgb(255 255 255 / 0.035) 22px 24px
+  );
+}
