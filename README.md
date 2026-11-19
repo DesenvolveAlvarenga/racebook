@@ -4,7 +4,7 @@ Plataforma de portfólio esportivo para atletas: provas, resultados, pódios, eq
 
 **Stack:** Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · Lucide · Supabase (Postgres, Auth, Storage) · Vercel
 
-> Status: **Etapa 2 concluída**: banco de dados, autenticação completa e painel protegido.
+> Status: **Etapa 3 concluída**: perfil esportivo editável, fotos no Supabase Storage e página pública `/atleta/[slug]`.
 
 ---
 
@@ -49,13 +49,17 @@ As migrations ficam em `supabase/migrations/` e devem ser executadas **em ordem*
 |---|---|
 | `20261119000001_initial_schema.sql` | Tabelas, índices, gatilhos, indicadores, RLS e bucket de imagens |
 | `20261119000002_auth_adjustments.sql` | Criação de perfil mais robusta no cadastro e bloqueio de funções internas |
+| `20261119000003_profile_editing.sql` | Caminhos de arquivo restritos à pasta do dono, limites do perfil e função `is_slug_available` |
+| `20261119000004_profile_hardening.sql` | Slugs reservados no banco, cadastro resistente a conflitos, colunas editáveis restritas e troca transacional de foto/capa |
 
 **Pelo painel (mais simples):**
 
 1. Supabase → **SQL Editor → New query**.
 2. Cole o conteúdo do arquivo `...000001_initial_schema.sql` → **Run**.
 3. Nova query com o conteúdo de `...000002_auth_adjustments.sql` → **Run**.
-4. Confira em **Table Editor**: `profiles`, `competitions`, `competition_photos`, `equipment`, `competition_equipment`, `trainings`, `training_photos`.
+4. Nova query com o conteúdo de `...000003_profile_editing.sql` → **Run**.
+5. Nova query com o conteúdo de `...000004_profile_hardening.sql` → **Run**.
+6. Confira em **Table Editor**: `profiles`, `competitions`, `competition_photos`, `equipment`, `competition_equipment`, `trainings`, `training_photos`.
 
 **Pela CLI (opcional):**
 
@@ -73,6 +77,15 @@ A migration já cria o bucket **`media`**, **privado**, com limite de 8 MB e ape
 - As fotos ficam em `{id-do-usuário}/...`; cada atleta só envia, altera e exclui na própria pasta.
 - O site exibe as imagens por **links temporários assinados**. Fotos privadas não podem ser abertas por URL, mesmo que alguém descubra o caminho.
 - Nada é salvo no disco da Vercel.
+
+**Foto de perfil e capa (Etapa 3):**
+
+1. O navegador reduz e comprime a imagem (foto 640×640 recortada no centro; capa até 2000 px, em WEBP ou JPEG).
+2. Uma Server Action valida tipo e tamanho e gera um link de upload para um caminho escolhido pelo servidor: `{id}/avatar/{uuid}.webp` ou `{id}/cover/{uuid}.webp`.
+3. O arquivo vai direto do navegador para o Supabase Storage (não passa pela Vercel, que limita o tamanho das requisições).
+4. Outra Server Action confere o arquivo (existência, Content-Type, extensão, assinatura real JPG/PNG/WEBP, até 5 MB), troca a imagem no banco de forma transacional (`swap_profile_image`), apaga a anterior e limpa arquivos órfãos com mais de 1 hora na mesma pasta.
+
+Uma restrição no banco garante que `avatar_path`, `cover_path` e os caminhos de fotos/equipamentos sempre apontem para a pasta do próprio atleta.
 
 ## 6. Configurar a autenticação
 
@@ -169,14 +182,18 @@ src/
 │  ├─ (auth)/                 entrar, cadastro, cadastro/verifique-email, recuperar-senha, nova-senha
 │  ├─ auth/callback/route.ts  destino dos links de e-mail (confirmação e recuperação)
 │  ├─ auth/erro/              link inválido ou expirado
-│  ├─ painel/                 área logada
+│  ├─ painel/                 área logada (painel, boas-vindas, perfil)
+│  ├─ atleta/[slug]/          página pública do atleta
 │  ├─ page.tsx                página inicial
 │  ├─ error.tsx, not-found.tsx
-├─ components/                brand/, ui/, auth/, layout/
+├─ components/                brand/, ui/, auth/, layout/, profile/
 ├─ lib/
-│  ├─ supabase/               client.ts (navegador), server.ts (servidor), proxy.ts (sessão)
-│  ├─ actions/auth.ts         Server Actions de autenticação
-│  ├─ validations/auth.ts     validação com Zod (executada no servidor)
+│  ├─ supabase/               client.ts (navegador), server.ts (servidor), proxy.ts (sessão), public.ts (anônimo)
+│  ├─ actions/                auth.ts, profile.ts (Server Actions)
+│  ├─ validations/            auth.ts, profile.ts (Zod, executado no servidor)
+│  ├─ constants/profile.ts    modalidades, estados, slugs reservados, limites de imagem
+│  ├─ profile.ts              leitura de perfis e links assinados (somente servidor)
+│  ├─ supabase/public.ts      cliente anônimo (visão de visitante)
 │  ├─ auth.ts                 getSessionUser() / requireUser()
 │  └─ env.ts, redirect.ts, auth-errors.ts, utils.ts
 ├─ types/database.ts
@@ -191,3 +208,10 @@ supabase/migrations/
 3. **Banco (RLS)**: mesmo que alguém chame a API do Supabase diretamente, só consegue ler o que é público e alterar o que é seu.
 
 Outros cuidados: redirecionamentos só para caminhos internos (`?next=`), mensagens de recuperação de senha que não revelam se o e-mail existe, páginas logadas com `Cache-Control: private, no-store` e cabeçalhos de segurança em `next.config.ts`.
+
+**Perfil público e privacidade (Etapa 3)**
+
+- Visitantes e o modo **“Ver como visitante”** usam um cliente Supabase **sem sessão** (papel `anon`): a página mostra exatamente o que a RLS libera para qualquer pessoa.
+- Perfil privado ou inexistente mostram a **mesma** mensagem (“Perfil indisponível”), sem revelar que a conta existe.
+- Apenas colunas públicas são consultadas na página do atleta (nunca `birth_date`). Título e descrição para buscadores e redes sociais vêm sempre da visão pública.
+- A disponibilidade de slug é checada pela função `is_slug_available` (só devolve verdadeiro/falso) e confirmada pelo índice único no momento de salvar.
